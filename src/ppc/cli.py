@@ -37,7 +37,7 @@ def compress(input_path, output, passphrase, level, upload, name):
     console.print(f"[bold]Input[/]: {input_path} ({mime})")
 
     raw = read_bytes(input_path)
-    comp = ZstdCompressor(level=level).compress(raw)
+    comp = ZstdCompressor(level_or_option=level).compress(raw)
     console.print(f"[green]Compressed[/] {len(raw)} -> {len(comp)} bytes")
 
     ciphertext, crypt_hdr = encrypt(comp, passphrase)
