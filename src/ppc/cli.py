@@ -24,7 +24,7 @@ def cli():
 @cli.command()
 @click.argument("input_path", type=click.Path(exists=True, dir_okay=False))
 @click.option("-o", "--output", type=click.Path(dir_okay=False), help="Output .ppc path")
-@click.option("-p", "--passphrase", prompt=True, hide_input=True, confirmation_prompt=False,
+@click.option("-p", "--passphrase", prompt=True, hide_input=True, confirmation_prompt=False, envvar="PPC_PASSPHRASE",
               help="Passphrase for AES-GCM encryption")
 @click.option("--level", default=7, show_default=True, help="Zstd compression level (1-22)")
 @click.option("--upload", type=click.Choice(["none","web3","pinata"], case_sensitive=False), default="none",
@@ -78,7 +78,7 @@ def compress(input_path, output, passphrase, level, upload, name):
 @cli.command()
 @click.argument("container_path", type=click.Path(exists=True, dir_okay=False))
 @click.option("-o", "--output", type=click.Path(dir_okay=False), help="Output original file path")
-@click.option("-p", "--passphrase", prompt=True, hide_input=True, confirmation_prompt=False)
+@click.option("-p", "--passphrase", prompt=True, hide_input=True, confirmation_prompt=False, envvar="PPC_PASSPHRASE")
 def decompress(container_path, output, passphrase):
     """Decrypt + decompress a .ppc container back to its original file."""
     blob = read_bytes(container_path)
