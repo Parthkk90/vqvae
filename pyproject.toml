@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ppc-cli"
+version = "0.1.0"
+description = "A CLI for the Pied Piper universal container format."
+requires-python = ">=3.8"
+dependencies = [
+    "click",
+    "rich",
+    "python-dotenv",
+    "pyzstd",
+    "cryptography",
+    "requests",
+    # Platform-specific dependency for libmagic
+    "python-magic-bin; sys_platform == 'win32'",
+    "python-magic; sys_platform != 'win32'",
+]
+
+# This section tells setuptools to look for your code in the 'src' directory
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# This is the magic part that creates the 'ppc' command!
+# It maps the command name 'ppc' to the 'cli' function in the 'ppc.cli' module.
+[project.scripts]
+ppc = "ppc.cli:cli"

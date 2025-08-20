@@ -24,7 +24,7 @@ def encrypt(plaintext: bytes, passphrase: str) -> tuple[bytes, dict]:
     aead = AESGCM(key)
     ciphertext = aead.encrypt(nonce, plaintext, associated_data=None)
     header_crypto = {
-        "kdf": {"name": "scrypt", "salt_b64": b64e(salt), "n": 2 ** 14, "r": 8, "p": 1},
+        "kdf": {"name": "scrypt", "salt_b64": b64e(salt), "n": SCRYPT_N, "r": SCRYPT_R, "p": SCRYPT_P},
         "cipher": {"name": "aes-256-gcm", "nonce_b64": b64e(nonce), "tag_len": 16},
     }
     return ciphertext, header_crypto

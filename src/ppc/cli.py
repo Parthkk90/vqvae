@@ -3,13 +3,14 @@ import os, json
 import click
 from rich.console import Console
 from rich.table import Table
+from cryptography.exceptions import InvalidTag
 from dotenv import load_dotenv
-from pyzstd import ZstdCompressor, ZstdDecompressor
+from pyzstd import compress as zstd_compress, ZstdDecompressor, ZstdError
 
 from .detect import detect_mime
 from .crypto import encrypt, decrypt
-from .container import Header, pack, unpack
-from .ipfs import upload_web3, upload_pinata, gateway_url
+from .container import Header, pack, unpack, MAGIC
+from .ipfs import upload_web3, upload_pinata, gateway_url, upload_daemon, download_daemon
 from .utils import now_iso, read_bytes, write_bytes
 
 console = Console()
@@ -37,7 +38,7 @@ def compress(input_path, output, passphrase, level, upload, name):
     console.print(f"[bold]Input[/]: {input_path} ({mime})")
 
     raw = read_bytes(input_path)
-    comp = ZstdCompressor(level_or_option=level).compress(raw)
+    comp = zstd_compress(raw, level_or_option=level)
     console.print(f"[green]Compressed[/] {len(raw)} -> {len(comp)} bytes")
 
     ciphertext, crypt_hdr = encrypt(comp, passphrase)
@@ -58,9 +59,9 @@ def compress(input_path, output, passphrase, level, upload, name):
     write_bytes(out, blob)
     console.print(f"[bold green]Wrote[/] {out} ({len(blob)} bytes)")
 
-    if upload.lower() != "none":
+    if upload != "none":
         console.rule("Upload")
-        if upload.lower() == "web3":
+        if upload == "web3":
             token = os.getenv("WEB3_STORAGE_TOKEN")
             if not token:
                 raise click.ClickException("WEB3_STORAGE_TOKEN missing in .env")
@@ -77,14 +78,19 @@ def compress(input_path, output, passphrase, level, upload, name):
 @cli.command()
 @click.argument("container_path", type=click.Path(exists=True, dir_okay=False))
 @click.option("-o", "--output", type=click.Path(dir_okay=False), help="Output original file path")
-@click.option("-p", "--passphrase", prompt=True, hide_input=True)
+@click.option("-p", "--passphrase", prompt=True, hide_input=True, confirmation_prompt=False)
 def decompress(container_path, output, passphrase):
     """Decrypt + decompress a .ppc container back to its original file."""
     blob = read_bytes(container_path)
-    header, payload = unpack(blob)
-
-    comp = decrypt(payload, passphrase, header.kdf["salt_b64"], header.cipher["nonce_b64"])
-    raw = ZstdDecompressor().decompress(comp)
+    try:
+        header, payload = unpack(blob)
+        comp = decrypt(payload, passphrase, header.kdf["salt_b64"], header.cipher["nonce_b64"])
+        raw = ZstdDecompressor().decompress(comp)
+    except InvalidTag:
+        raise click.ClickException("Decryption failed. Invalid passphrase or corrupted data.")
+    except (ValueError, ZstdError) as e:
+        # Catches container format errors (ValueError) or zstd errors
+        raise click.ClickException(f"Decompression failed: {e}")
 
     out = output or header.orig_name
     write_bytes(out, raw)
@@ -98,7 +104,10 @@ def decompress(container_path, output, passphrase):
 def inspect(container_path):
     """View container header metadata."""
     blob = read_bytes(container_path)
-    header, payload = unpack(blob)
+    try:
+        header, payload = unpack(blob)
+    except ValueError as e:
+        raise click.ClickException(f"Could not inspect file: {e}")
 
     table = Table(title="PPC Header")
     table.add_column("Field")
@@ -121,5 +130,37 @@ def gateway(cid):
     console.print(gateway_url(cid))
 
 
-if __name__ == "__main__":
-    cli()
+@cli.command()
+@click.argument("file_path", type=click.Path(exists=True, dir_okay=False, readable=True))
+def push(file_path):
+    """Upload a .ppc container to a local IPFS daemon."""
+    with open(file_path, "rb") as f:
+        if f.read(4) != MAGIC:
+            raise click.ClickException("Input is not a valid .ppc file.")
+
+    console.rule("Push to IPFS Daemon")
+    try:
+        with console.status("[bold cyan]Uploading..."):
+            cid = upload_daemon(file_path)
+        console.print(f"File [bold]{os.path.basename(file_path)}[/] uploaded successfully.")
+        console.print(f"CID: [bold green]{cid}[/]")
+        console.print(f"Gateway URL: {gateway_url(cid)}")
+    except (ImportError, ConnectionError, FileNotFoundError) as e:
+        raise click.ClickException(str(e))
+    except Exception as e:
+        raise click.ClickException(f"An unexpected error occurred: {e}")
+
+@cli.command()
+@click.argument("cid")
+@click.argument("output_path", type=click.Path(dir_okay=False, writable=True))
+def pull(cid, output_path):
+    """Download a file from a local IPFS daemon using its CID."""
+    console.rule("Pull from IPFS Daemon")
+    try:
+        with console.status(f"[bold cyan]Downloading {cid}..."):
+            download_daemon(cid, output_path)
+        console.print(f"Downloaded [bold]{cid}[/] to [bold green]{output_path}[/]")
+    except (ImportError, ConnectionError, FileNotFoundError) as e:
+        raise click.ClickException(str(e))
+    except Exception as e:
+        raise click.ClickException(f"An unexpected error occurred: {e}")

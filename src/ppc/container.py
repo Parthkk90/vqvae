@@ -44,6 +44,8 @@ def unpack(blob: bytes) -> tuple[Header, bytes]:
         raise ValueError(f"Unsupported PPC version: {ver}")
     hlen = struct.unpack("<I", buf.read(4))[0]
     hjson = buf.read(hlen)
+    if len(hjson) < hlen:
+        raise ValueError("Container is truncated or header length is corrupt")
     header = Header.from_json(hjson)
     payload = buf.read()
     return header, payload
