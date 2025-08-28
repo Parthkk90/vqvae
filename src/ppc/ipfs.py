@@ -34,7 +34,10 @@ def upload_pinata(data: bytes, filename: str, jwt: str) -> str:
     return resp["IpfsHash"]
 
 
-def gateway_url(cid: str) -> str:
+def gateway_url(cid: str, service: str | None = None) -> str:
+    if service == "pinata":
+        return f"https://gateway.pinata.cloud/ipfs/{cid}"
+    # Default to a good public gateway like w3s.link
     return f"https://w3s.link/ipfs/{cid}"
 
 def upload_daemon(file_path: str) -> str:
